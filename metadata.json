@@ -1,0 +1,7 @@
+{
+  "name": "Jarvis",
+  "description": "A personalized AI assistant hub where you can interact with specialized Gems like Brainstormer, Career Guide, and Coding Partner, or create your own custom assistants.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
