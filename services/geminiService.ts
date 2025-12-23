@@ -8,12 +8,23 @@ class GeminiService {
   private currentGemId: string | null = null;
 
   constructor() {
-    // API key must be available in process.env.API_KEY
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      console.error("API_KEY is missing from environment variables.");
+    // Safely retrieve API Key from process.env if available, otherwise default to empty string
+    // to prevent runtime crash during initialization.
+    // NOTE: The actual API call will fail if the key is missing, which is expected.
+    let apiKey = '';
+    try {
+      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+        apiKey = process.env.API_KEY;
+      }
+    } catch (e) {
+      console.warn("Could not read process.env.API_KEY");
     }
-    this.ai = new GoogleGenAI({ apiKey: apiKey || '' });
+
+    if (!apiKey) {
+      console.warn("API_KEY is missing. AI features will not function.");
+    }
+    
+    this.ai = new GoogleGenAI({ apiKey });
   }
 
   /**

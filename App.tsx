@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Home, UserCircle, MessageSquare, Plus } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Home, UserCircle, MessageSquare, Plus, Loader2 } from 'lucide-react';
 import { Gem, ViewMode, Message } from './types';
 import { INITIAL_GEMS } from './constants';
 import { Sidebar } from './components/Sidebar';
@@ -8,6 +8,7 @@ import { ChatArea } from './components/ChatArea';
 import { RecentChats } from './components/RecentChats';
 import { CreateGemModal } from './components/CreateGemModal';
 import { ProfileSection } from './components/ProfileSection';
+import { db } from './services/database';
 
 function App() {
   const [gems, setGems] = useState<Gem[]>(INITIAL_GEMS);
@@ -15,9 +16,21 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('gallery');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   
   // Global Session State
   const [sessions, setSessions] = useState<Record<string, Message[]>>({});
+
+  // Initialize Data from DB
+  useEffect(() => {
+    const initApp = async () => {
+      const data = await db.init();
+      setGems(data.gems);
+      setSessions(data.sessions);
+      setIsInitializing(false);
+    };
+    initApp();
+  }, []);
 
   const handleSelectGem = (gem: Gem) => {
     setActiveGem(gem);
@@ -39,8 +52,11 @@ function App() {
     setViewMode('profile');
   };
 
-  const handleCreateGem = (newGem: Gem) => {
-    setGems(prev => [newGem, ...prev]);
+  const handleCreateGem = async (newGem: Gem) => {
+    const updatedGems = [newGem, ...gems];
+    setGems(updatedGems);
+    await db.saveGems(updatedGems); // Persist
+    
     setActiveGem(newGem);
     setViewMode('chat');
   };
@@ -51,19 +67,35 @@ function App() {
     setSessions(prevSessions => {
       const currentMessages = prevSessions[activeGem.id] || [];
       const newMessages = typeof messages === 'function' ? messages(currentMessages) : messages;
-      return {
+      
+      const updatedSessions = {
         ...prevSessions,
         [activeGem.id]: newMessages
       };
+      
+      // Persist to DB asynchronously
+      db.saveSession(activeGem.id, newMessages);
+      
+      return updatedSessions;
     });
   };
 
   // Determine which navigation item is active
   const activeNav = useMemo(() => {
-    if (viewMode === 'chat') return 'recents'; // Chat implies we are in a session, map to chats or gallery?
-    // Actually, stick to the viewMode map.
+    if (viewMode === 'chat') return 'recents';
     return viewMode;
   }, [viewMode]);
+
+  if (isInitializing) {
+    return (
+      <div className="flex w-full h-[100dvh] bg-slate-50 items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-medium text-sm">Loading Gems...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-full h-[100dvh] bg-slate-100 overflow-hidden font-sans">
@@ -71,7 +103,7 @@ function App() {
       {/* Desktop Sidebar */}
       <div className="hidden md:flex h-full">
         <Sidebar
-          activeView={viewMode === 'chat' ? 'recents' : viewMode}
+          activeView={activeNav}
           onGoHome={handleGoHome}
           onGoChats={handleGoChats}
           onGoProfile={handleGoProfile}
