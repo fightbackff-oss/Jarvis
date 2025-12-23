@@ -1,65 +1,47 @@
-import { GoogleGenAI, Chat, GenerateContentResponse, Content } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, Content } from "@google/genai";
 import { MODEL_NAME } from '../constants';
 import { Message } from '../types';
 
-class GeminiService {
-  private ai: GoogleGenAI;
-  private chatSession: Chat | null = null;
-  private currentGemId: string | null = null;
-
-  constructor() {
-    // Safely retrieve API Key from process.env if available, otherwise default to empty string
-    // to prevent runtime crash during initialization.
-    // NOTE: The actual API call will fail if the key is missing, which is expected.
-    let apiKey = '';
-    try {
-      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-        apiKey = process.env.API_KEY;
-      }
-    } catch (e) {
-      console.warn("Could not read process.env.API_KEY");
-    }
-
-    if (!apiKey) {
-      console.warn("API_KEY is missing. AI features will not function.");
-    }
-    
-    this.ai = new GoogleGenAI({ apiKey });
-  }
-
+/**
+ * Service for interacting with the Gemini API.
+ * Follows the guideline: "Create a new GoogleGenAI instance right before making an API call"
+ */
+export const geminiService = {
   /**
-   * Initializes a new chat session with the specific Gem's system instructions and optional history.
+   * Sends a message to the model and streams the response.
+   * Instantiates the client on every call to pick up the latest environment/session key.
    */
-  startChat(gemId: string, systemInstruction: string, history: Message[] = []) {
-    this.currentGemId = gemId;
+  async *sendMessageStream(
+    message: string, 
+    systemInstruction: string, 
+    history: Message[]
+  ): AsyncGenerator<string, void, unknown> {
     
-    // Convert app Messages to GenAI Content format
+    // Check for API key availability
+    const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : '';
+    
+    // Instantiate exactly when needed
+    const ai = new GoogleGenAI({ apiKey });
+
+    // Convert app Messages to GenAI Content format for chat history
     const historyContent: Content[] = history
-      .filter(msg => !msg.isStreaming) // Filter out incomplete streaming messages if any
+      .filter(msg => !msg.isStreaming)
       .map(msg => ({
         role: msg.role,
         parts: [{ text: msg.content }]
       }));
 
-    this.chatSession = this.ai.chats.create({
+    // Initialize chat session
+    const chat = ai.chats.create({
       model: MODEL_NAME,
       config: {
         systemInstruction: systemInstruction,
       },
       history: historyContent
     });
-  }
-
-  /**
-   * Sends a message to the current chat session and yields streaming text chunks.
-   */
-  async *sendMessageStream(message: string): AsyncGenerator<string, void, unknown> {
-    if (!this.chatSession) {
-      throw new Error("Chat session not initialized.");
-    }
 
     try {
-      const resultStream = await this.chatSession.sendMessageStream({ message });
+      const resultStream = await chat.sendMessageStream({ message });
       
       for await (const chunk of resultStream) {
         const responseChunk = chunk as GenerateContentResponse;
@@ -67,15 +49,15 @@ class GeminiService {
           yield responseChunk.text;
         }
       }
-    } catch (error) {
-      console.error("Error sending message to Gemini:", error);
+    } catch (error: any) {
+      console.error("Gemini API Error:", error);
+      
+      // Pass through specific errors that UI might want to handle specially
+      if (error.message?.includes("Requested entity was not found") || error.message?.includes("API key")) {
+        throw new Error("AUTH_ERROR");
+      }
+      
       throw error;
     }
   }
-
-  getGemId() {
-    return this.currentGemId;
-  }
-}
-
-export const geminiService = new GeminiService();
+};

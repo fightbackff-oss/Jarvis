@@ -1,6 +1,5 @@
-import React from 'react';
-import { Home, MessageSquare, UserCircle } from 'lucide-react';
-import { Gem } from '../types';
+import React, { useEffect, useState } from 'react';
+import { Home, MessageSquare, UserCircle, Key } from 'lucide-react';
 
 interface SidebarProps {
   onGoHome: () => void;
@@ -15,6 +14,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onGoProfile,
   activeView,
 }) => {
+  const [needsApiKey, setNeedsApiKey] = useState(false);
+
+  useEffect(() => {
+    // Check if running in an environment that supports dynamic key selection
+    if (typeof window !== 'undefined' && (window as any).aistudio) {
+      const checkKey = async () => {
+        try {
+           const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+           setNeedsApiKey(!hasKey);
+        } catch (e) {
+          console.log("AI Studio check skipped");
+        }
+      };
+      checkKey();
+    }
+  }, []);
+
+  const handleConnectKey = async () => {
+    if ((window as any).aistudio) {
+      try {
+        await (window as any).aistudio.openSelectKey();
+        setNeedsApiKey(false);
+      } catch (e) {
+        console.error("Failed to select key", e);
+      }
+    }
+  };
+
   return (
     <div className="w-72 bg-white border-r border-slate-200 flex flex-col h-full">
       <div className="p-6 border-b border-slate-50 flex items-center gap-3">
@@ -60,7 +87,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      <div className="p-6">
+      <div className="p-6 space-y-4">
+        {needsApiKey && (
+          <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 animate-[fadeIn_0.5s_ease-out]">
+             <h3 className="font-bold text-sm text-amber-800 mb-1">API Key Required</h3>
+             <p className="text-xs text-amber-600 mb-3 leading-relaxed">Connect your Google AI Studio key to start chatting.</p>
+             <button 
+               onClick={handleConnectKey}
+               className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2"
+             >
+               <Key className="w-3 h-3" />
+               Connect Key
+             </button>
+          </div>
+        )}
+
         <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-5 text-white shadow-lg">
            <h3 className="font-bold text-sm mb-1">Go Pro</h3>
            <p className="text-xs text-indigo-100 mb-3 opacity-90">Unlock advanced models and unlimited history.</p>
